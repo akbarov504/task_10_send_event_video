@@ -30,7 +30,7 @@ DEFAULT_AFTER  = 5   # seconds after  event if Event enum has None
 CLIP_DIR       = os.path.join(LOCAL_PATH, "event_clips")
 os.makedirs(CLIP_DIR, exist_ok=True)
 
-NOTIFY_URL     = f"{API_BASE_STREAM}/api/driver-events/media"
+NOTIFY_URL     = f"{API_BASE_STREAM}/driver-events/media"
 
 # How often the background loop runs (seconds)
 POLL_INTERVAL  = 10
@@ -290,7 +290,7 @@ def extract_first_frame(video_path: str, out_path: str) -> bool:
 
 async def _get_upload_url(session: aiohttp.ClientSession, token: str, file_name: str, content_type: str) -> str | None:
     """POST to backend to get a signed GCS upload URL."""
-    url = f"{API_BASE_STREAM}/api/google-cloud-storage/upload-url"
+    url = f"{API_BASE_STREAM}/google-cloud-storage/upload-url"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"fileName": file_name}
     async with session.post(url, json=payload, headers=headers) as resp:
@@ -328,7 +328,7 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
     file_name    = os.path.basename(local_path)
 
     # Step 1: get signed URL
-    url          = f"{API_BASE_STREAM}/api/google-cloud-storage/upload-url"
+    url          = f"{API_BASE_STREAM}/google-cloud-storage/upload-url"
     headers      = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload      = {"fileName": file_name}
 

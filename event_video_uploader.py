@@ -195,13 +195,13 @@ def cut_event_clip(
             continue
         try:
             ts_str    = fname[len(prefix):-4]
-            print(ts_str)
+            print("ts_str = " + ts_str)
             seg_start = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
             seg_end   = seg_start + timedelta(seconds=10)
-            print(seg_start)
-            print(seg_end)
-            print(clip_start)
-            print(clip_end)
+            print("seg_start = " + seg_start)
+            print("seg_end = " + seg_end)
+            print("clip_start = " + clip_start)
+            print("clip_end = " + clip_end)
             if seg_end > clip_start and seg_start < clip_end:
                 segments.append((seg_start, os.path.join(LOCAL_PATH, fname)))
         except ValueError:

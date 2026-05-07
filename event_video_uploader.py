@@ -194,10 +194,13 @@ def cut_event_clip(
         if not fname.startswith(prefix) or not fname.endswith(".mp4"):
             continue
         try:
-            print("kirdi")
             ts_str    = fname[len(prefix):-4]
             seg_start = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
             seg_end   = seg_start + timedelta(seconds=10)
+            print(seg_start)
+            print(seg_end)
+            print(clip_start)
+            print(clip_end)
             if seg_end > clip_start and seg_start < clip_end:
                 segments.append((seg_start, os.path.join(LOCAL_PATH, fname)))
         except ValueError:

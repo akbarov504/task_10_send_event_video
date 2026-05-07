@@ -13,7 +13,7 @@ import sqlite3
 
 from core.config import (
     DB_PATH, LOCAL_PATH, Event,
-    API_BASE_STREAM, TOKEN_FILE_PATH,
+    API_BASE_STREAM, API_BASE_EVENT, TOKEN_FILE_PATH,
     CAMERA_INDEX_INNER, CAMERA_INDEX_FRONT,
     WIDTH, HEIGHT, FPS,
 )
@@ -30,7 +30,7 @@ DEFAULT_AFTER  = 5   # seconds after  event if Event enum has None
 CLIP_DIR       = os.path.join(LOCAL_PATH, "event_clips")
 os.makedirs(CLIP_DIR, exist_ok=True)
 
-NOTIFY_URL     = f"{API_BASE_STREAM}/driver-events/media"
+NOTIFY_URL     = f"{API_BASE_EVENT}/driver-events/media"
 
 # How often the background loop runs (seconds)
 POLL_INTERVAL  = 10

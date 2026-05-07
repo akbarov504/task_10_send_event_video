@@ -4,16 +4,16 @@ from core.config import DB_PATH
 with sqlite3.connect(DB_PATH) as conn:
     c = conn.cursor()
 
-    c.execute("SELECT COUNT(*) FROM videos")
+    c.execute("SELECT COUNT(*) FROM event_videos")
     total = c.fetchone()[0]
 
-    c.execute("SELECT COUNT(*) FROM videos WHERE uploaded=0")
+    c.execute("SELECT COUNT(*) FROM event_videos WHERE uploaded=0")
     unuploaded = c.fetchone()[0]
 
-    c.execute("SELECT COUNT(*) FROM videos WHERE uploaded=1")
+    c.execute("SELECT COUNT(*) FROM event_videos WHERE uploaded=1")
     uploaded = c.fetchone()[0]
 
-    c.execute("SELECT id, file_path, uploaded, retries, start_time FROM videos ORDER BY id DESC LIMIT 5")
+    c.execute("SELECT id, file_path, uploaded, retries, deviceDateTime, globalEventId FROM event_videos ORDER BY id DESC LIMIT 5")
     last5 = c.fetchall()
 
 print(f"DB PATH   : {DB_PATH}")

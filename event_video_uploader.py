@@ -290,7 +290,7 @@ def extract_first_frame(video_path: str, out_path: str) -> bool:
 
 async def _get_upload_url(session: aiohttp.ClientSession, token: str, file_name: str, content_type: str) -> str | None:
     """POST to backend to get a signed GCS upload URL."""
-    url = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
+    url = f"{API_BASE_EVENT}/api/google-cloud-storage/upload-url"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"fileName": file_name}
     async with session.post(url, json=payload, headers=headers) as resp:

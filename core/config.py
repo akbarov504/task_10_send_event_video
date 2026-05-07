@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(ROOT_DIR)
@@ -18,6 +19,54 @@ API_BASE_STREAM = 'https://dev-gw.tracksafe365.com/services/glsstream/api'
 TOKEN_REFRESH_MARGIN = 300  # seconds (5 minutes before expiry)
 TOKEN_FILE_PATH = os.path.join(BASE_DIR, 'token_info.json')
 
+# =========================
+# EVENT ENUMS
+# =========================
+
+class Event(Enum):
+    LIGHT_SPEEDING = (None, 5)
+
+    MODERATE_SPEEDING = (None, 5)
+
+    HEAVY_SPEEDING = (None, 5)
+
+    SEVERE_SPEEDING = (None, 5)
+
+    HARSH_BRAKE = (5, 5)
+
+    HARSH_TURN = (5, 5)
+
+    CRASH = (20, 10)
+
+    MOBILE_USAGE = (None, 5)
+
+    INATTENTIVE_DRIVING = (5, 5)
+
+    DROWSY = (5, 5)
+
+    FOLLOWING_DISTANCE = (5, 5)
+
+    WEATHER_CONDITION = (None, 5)
+
+    SHOULDER_STOP = (5, 5)
+
+    HARSH_ACCELERATION = (5, 5)
+
+    NO_SEAT_BELT = (None, 5)
+
+    ROLLING_STOP = (5, 5)
+
+    CAMERA_OBSTRUCTED = (5, 5)
+
+    PASSENGER_DETECTION = (None, 5)
+
+    LEFT_LANE = (5, 5)
+
+    LANE_DEPARTURE = (5, 5)
+
+    SMOKING = (None, 5)
+
+    DRINKING = (None, 5)
 
 # Camera config
 CAMERA_TYPE = 'usb' # or 'csi'

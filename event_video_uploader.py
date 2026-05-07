@@ -273,6 +273,7 @@ def extract_first_frame(video_path: str, out_path: str) -> bool:
         "-i", video_path,
         "-frames:v", "1",
         "-q:v", "2",
+        "-f", "image2",
         out_path,
     ]
     ret = subprocess.run(cmd, capture_output=True)
@@ -509,8 +510,8 @@ async def upload_event_media_pass():
 
             try:
                 # ── Screenshots ──────────────────────────────
-                inner_ss_path = inner_video.replace(".mp4", "_ss.webp")
-                front_ss_path = front_video.replace(".mp4", "_ss.webp")
+                inner_ss_path = inner_video.replace(".mp4", "_ss.jpg")
+                front_ss_path = front_video.replace(".mp4", "_ss.jpg")
 
                 inner_ss_ok = extract_first_frame(inner_video, inner_ss_path)
                 front_ss_ok = extract_first_frame(front_video, front_ss_path)

@@ -292,7 +292,7 @@ async def _get_upload_url(session: aiohttp.ClientSession, token: str, file_name:
     """POST to backend to get a signed GCS upload URL."""
     url = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {"fileName": file_name, "contentType": content_type}
+    payload = {"fileName": file_name}
     async with session.post(url, json=payload, headers=headers) as resp:
         if resp.status != 200:
             text = await resp.text()
@@ -330,7 +330,7 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
     # Step 1: get signed URL
     url          = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
     headers      = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload      = {"fileName": file_name, "contentType": content_type}
+    payload      = {"fileName": file_name}
 
     async with session.post(url, json=payload, headers=headers) as resp:
         if resp.status != 200:

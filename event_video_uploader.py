@@ -17,7 +17,7 @@ from core.config import (
     CAMERA_INDEX_INNER, CAMERA_INDEX_FRONT,
     WIDTH, HEIGHT, FPS,
 )
-from core.token_manager import get_valid_token
+from utils.token_manager import get_valid_token
 
 logger = logging.getLogger(__name__)
 

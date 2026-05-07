@@ -30,7 +30,7 @@ DEFAULT_AFTER  = 5   # seconds after  event if Event enum has None
 CLIP_DIR       = os.path.join(LOCAL_PATH, "event_clips")
 os.makedirs(CLIP_DIR, exist_ok=True)
 
-NOTIFY_URL     = f"{API_BASE_EVENT}/driver-events/media"
+NOTIFY_URL     = f"{API_BASE_EVENT}/api/driver-events/media"
 
 # How often the background loop runs (seconds)
 POLL_INTERVAL  = 10
@@ -328,7 +328,7 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
     file_name    = os.path.basename(local_path)
 
     # Step 1: get signed URL
-    url          = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
+    url          = f"{API_BASE_EVENT}/api/google-cloud-storage/upload-url"
     headers      = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload      = {"fileName": file_name}
 

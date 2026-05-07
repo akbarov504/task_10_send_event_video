@@ -195,6 +195,7 @@ def cut_event_clip(
             continue
         try:
             ts_str    = fname[len(prefix):-4]
+            print(ts_str)
             seg_start = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
             seg_end   = seg_start + timedelta(seconds=10)
             print(seg_start)

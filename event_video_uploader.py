@@ -188,7 +188,7 @@ def cut_event_clip(
     total_dur  = before_sec + after_sec
 
     # Gather all segment files that overlap the clip window
-    prefix = "inner_" if camera_type == "inner" else "front_"
+    prefix = "IN_" if camera_type == "inner" else "OUT_"
     segments = []
     for fname in sorted(os.listdir(LOCAL_PATH)):
         if not fname.startswith(prefix) or not fname.endswith(".mp4"):

@@ -394,7 +394,7 @@ async def notify_backend(
 # ──────────────────────────────────────────────
 
 # Max age: if event is older than this, segments are gone — skip it
-CLIP_MAX_EVENT_AGE_MINUTES = 30
+CLIP_MAX_EVENT_AGE_MINUTES = 90
 
 def create_clips_for_new_events():
     """

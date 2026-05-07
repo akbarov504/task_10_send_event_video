@@ -1,48 +1,83 @@
 import os
+import time
+import uuid
 import asyncio
 import aiohttp
 import aiofiles
 import subprocess
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import sqlite3
 
 from core.config import (
     DB_PATH, LOCAL_PATH, Event,
-    API_BASE_EVENT)
-from utils.token_manager import get_valid_token
+    API_BASE_EVENT, TOKEN_FILE_PATH,
+    CAMERA_INDEX_INNER, CAMERA_INDEX_FRONT,
+    WIDTH, HEIGHT, FPS,
+)
+from core.token_manager import get_valid_token
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BEFORE = 5
-DEFAULT_AFTER  = 5
+# ──────────────────────────────────────────────
+# CONSTANTS
+# ──────────────────────────────────────────────
+DEFAULT_BEFORE = 5   # seconds before event if Event enum has None
+DEFAULT_AFTER  = 5   # seconds after  event if Event enum has None
 
 CLIP_DIR       = os.path.join(LOCAL_PATH, "event_clips")
 os.makedirs(CLIP_DIR, exist_ok=True)
 
 NOTIFY_URL     = f"{API_BASE_EVENT}/driver-events/media"
 
+# How often the background loop runs (seconds)
 POLL_INTERVAL  = 10
+
+# ──────────────────────────────────────────────
+# HELPERS: Event timing
+# ──────────────────────────────────────────────
 
 def _get_event_window(event_type: str) -> tuple[int, int]:
     """
     Return (before_sec, after_sec) for a given eventType string.
     If before is None → event has no before window, clip = after seconds only (before=0).
     If after  is None → fallback to DEFAULT_AFTER.
+
+    Supports:
+      - Exact match:   'HARSH_BRAKE'
+      - Prefix match:  'HARSH' → first enum member starting with 'HARSH_'
     """
-    try:
-        ev = Event[event_type]
-        before, after = ev.value
-        before = 0             if before is None else int(before)
-        after  = DEFAULT_AFTER if after  is None else int(after)
-        return before, after
-    except KeyError:
-        logger.warning(f"Unknown event type '{event_type}', using defaults.")
+    # 1. Exact match
+    ev = Event.__members__.get(event_type)
+
+    # 2. Prefix match (e.g. 'HARSH' → 'HARSH_BRAKE')
+    if ev is None:
+        upper = event_type.upper()
+        for name, member in Event.__members__.items():
+            if name.startswith(upper):
+                ev = member
+                logger.debug(f"[EVENT_WINDOW] Partial match '{event_type}' → '{name}'")
+                break
+
+    if ev is None:
+        logger.warning(f"[EVENT_WINDOW] Unknown event type '{event_type}', using defaults.")
         return DEFAULT_BEFORE, DEFAULT_AFTER
+
+    before, after = ev.value
+    before = 0             if before is None else int(before)
+    after  = DEFAULT_AFTER if after  is None else int(after)
+    return before, after
+
+
+# ──────────────────────────────────────────────
+# DB HELPERS (event_videos table)
+# ──────────────────────────────────────────────
 
 def _db():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
+
 
 def insert_event_video(file_path: str, camera_type: str, device_dt: str, global_event_id: str):
     with _db() as conn:
@@ -52,6 +87,7 @@ def insert_event_video(file_path: str, camera_type: str, device_dt: str, global_
             VALUES (?, ?, ?, ?, 0)
         """, (file_path, camera_type, device_dt, global_event_id))
         conn.commit()
+
 
 def get_pending_event_groups(limit: int = 10):
     """
@@ -63,6 +99,7 @@ def get_pending_event_groups(limit: int = 10):
     with _db() as conn:
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
+        # Fetch distinct globalEventIds that have uploaded=0 clips
         c.execute("""
             SELECT globalEventId, deviceDateTime,
                    GROUP_CONCAT(camera_type) as cam_types,
@@ -87,6 +124,7 @@ def get_pending_event_groups(limit: int = 10):
         })
     return groups
 
+
 def mark_event_video_uploaded(global_event_id: str):
     with _db() as conn:
         conn.execute(
@@ -94,6 +132,7 @@ def mark_event_video_uploaded(global_event_id: str):
             (global_event_id,)
         )
         conn.commit()
+
 
 def increment_event_video_retry(global_event_id: str):
     now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -104,6 +143,11 @@ def increment_event_video_retry(global_event_id: str):
             WHERE globalEventId = ?
         """, (now, global_event_id))
         conn.commit()
+
+
+# ──────────────────────────────────────────────
+# VIDEO CLIP CUTTING  (ffmpeg)
+# ──────────────────────────────────────────────
 
 def _find_segment_file(camera_type: str, dt: datetime) -> str | None:
     """
@@ -127,6 +171,7 @@ def _find_segment_file(camera_type: str, dt: datetime) -> str | None:
             continue
     return best
 
+
 def cut_event_clip(
     camera_type: str,
     event_dt: datetime,
@@ -142,6 +187,7 @@ def cut_event_clip(
     clip_end   = event_dt + timedelta(seconds=after_sec)
     total_dur  = before_sec + after_sec
 
+    # Gather all segment files that overlap the clip window
     prefix = "inner_" if camera_type == "inner" else "front_"
     segments = []
     for fname in sorted(os.listdir(LOCAL_PATH)):
@@ -164,6 +210,7 @@ def cut_event_clip(
     out_path = os.path.join(CLIP_DIR, out_name)
 
     if len(segments) == 1:
+        # Single segment: just trim with ss + t
         seg_start, seg_file = segments[0]
         offset = max((clip_start - seg_start).total_seconds(), 0)
         cmd = [
@@ -175,6 +222,7 @@ def cut_event_clip(
             out_path,
         ]
     else:
+        # Multiple segments: write concat list then trim
         concat_list = os.path.join(CLIP_DIR, f"concat_{global_event_id}_{camera_type}.txt")
         with open(concat_list, "w") as f:
             for _, seg_file in segments:
@@ -213,6 +261,11 @@ def cut_event_clip(
     logger.info(f"[CLIP] Created {out_path}")
     return out_path
 
+
+# ──────────────────────────────────────────────
+# SCREENSHOT
+# ──────────────────────────────────────────────
+
 def extract_first_frame(video_path: str, out_path: str) -> bool:
     """Extract first frame of video as JPEG screenshot using ffmpeg."""
     cmd = [
@@ -229,9 +282,14 @@ def extract_first_frame(video_path: str, out_path: str) -> bool:
     logger.info(f"[SCREENSHOT] Saved {out_path}")
     return True
 
+
+# ──────────────────────────────────────────────
+# GOOGLE STORAGE UPLOAD
+# ──────────────────────────────────────────────
+
 async def _get_upload_url(session: aiohttp.ClientSession, token: str, file_name: str, content_type: str) -> str | None:
     """POST to backend to get a signed GCS upload URL."""
-    url = f"{API_BASE_EVENT}/video/upload/v2"
+    url = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {"fileName": file_name, "contentType": content_type}
     async with session.post(url, json=payload, headers=headers) as resp:
@@ -240,7 +298,9 @@ async def _get_upload_url(session: aiohttp.ClientSession, token: str, file_name:
             logger.error(f"[UPLOAD_URL] Failed {resp.status}: {text}")
             return None
         data = await resp.json()
+        # Adjust key based on actual API response shape
         return data.get("uploadUrl") or data.get("url")
+
 
 async def _put_file_to_gcs(session: aiohttp.ClientSession, upload_url: str, file_path: str, content_type: str) -> bool:
     """PUT file bytes to Google Cloud Storage signed URL."""
@@ -254,6 +314,7 @@ async def _put_file_to_gcs(session: aiohttp.ClientSession, upload_url: str, file
             return False
     return True
 
+
 async def upload_file(session: aiohttp.ClientSession, token: str, local_path: str, is_video: bool) -> str | None:
     """
     Full upload cycle:
@@ -265,9 +326,10 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
     content_type = "video/mp4" if is_video else "image/webp"
     file_name    = os.path.basename(local_path)
 
-    url          = f"{API_BASE_EVENT}/video/upload/v2"
+    # Step 1: get signed URL
+    url          = f"{API_BASE_EVENT}/google-cloud-storage/upload-url"
     headers      = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload      = {"fileName": file_name}
+    payload      = {"fileName": file_name, "contentType": content_type}
 
     async with session.post(url, json=payload, headers=headers) as resp:
         if resp.status != 200:
@@ -275,12 +337,14 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
             return None
         data       = await resp.json()
         upload_url = data.get("uploadUrl") or data.get("url")
+        # The key returned by backend to reference this file later
         storage_key = data.get("key") or data.get("fileName") or file_name
 
     if not upload_url:
         logger.error("[UPLOAD] No uploadUrl in response")
         return None
 
+    # Step 2: PUT to GCS
     async with aiofiles.open(local_path, "rb") as f:
         file_bytes = await f.read()
 
@@ -291,6 +355,11 @@ async def upload_file(session: aiohttp.ClientSession, token: str, local_path: st
 
     logger.info(f"[UPLOAD] Uploaded {local_path} → key: {storage_key}")
     return storage_key
+
+
+# ──────────────────────────────────────────────
+# BACKEND NOTIFY
+# ──────────────────────────────────────────────
 
 async def notify_backend(
     session: aiohttp.ClientSession,
@@ -319,10 +388,21 @@ async def notify_backend(
     logger.info(f"[NOTIFY] Backend notified for event {global_event_id}")
     return True
 
+
+# ──────────────────────────────────────────────
+# CLIP CREATION PASS  (called once per new event)
+# ──────────────────────────────────────────────
+
+# Max age: if event is older than this, segments are gone — skip it
+CLIP_MAX_EVENT_AGE_MINUTES = 30
+
 def create_clips_for_new_events():
     """
     Scan events table for events that don't have event_videos rows yet,
     cut clips for each, and insert into event_videos table.
+
+    Events older than CLIP_MAX_EVENT_AGE_MINUTES are skipped — their
+    segments are already gone from disk and will never be found.
     """
     with _db() as conn:
         conn.row_factory = sqlite3.Row
@@ -339,12 +419,15 @@ def create_clips_for_new_events():
         """)
         events = c.fetchall()
 
+    now = datetime.now()
+
     for ev in events:
         global_event_id = ev["globalEventId"]
         event_type      = ev["eventType"]
         device_dt_str   = ev["deviceDateTime"]
 
         try:
+            # Parse deviceDateTime — handle both with/without timezone
             for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S"):
                 try:
                     event_dt = datetime.strptime(device_dt_str, fmt)
@@ -355,7 +438,26 @@ def create_clips_for_new_events():
                 logger.error(f"[CLIP_CREATE] Cannot parse deviceDateTime: {device_dt_str}")
                 continue
 
+            # Remove tz for local file matching
             event_dt_local = event_dt.replace(tzinfo=None) if event_dt.tzinfo else event_dt
+
+            # Skip events older than max age — segments are gone from disk
+            age_minutes = (now - event_dt_local).total_seconds() / 60
+            if age_minutes > CLIP_MAX_EVENT_AGE_MINUTES:
+                logger.warning(
+                    f"[CLIP_CREATE] Skipping old event {global_event_id} "
+                    f"(age={age_minutes:.1f} min > {CLIP_MAX_EVENT_AGE_MINUTES} min), segments gone."
+                )
+                # Mark as uploaded=1 directly so this event is never retried
+                for cam in ("inner", "front"):
+                    with _db() as conn:
+                        conn.execute("""
+                            INSERT OR IGNORE INTO event_videos
+                                (file_path, camera_type, deviceDateTime, globalEventId, uploaded)
+                            VALUES (?, ?, ?, ?, 1)
+                        """, ("__skipped__", cam, device_dt_str, global_event_id))
+                        conn.commit()
+                continue
 
             before_sec, after_sec = _get_event_window(event_type)
 
@@ -369,6 +471,11 @@ def create_clips_for_new_events():
 
         except Exception as e:
             logger.exception(f"[CLIP_CREATE] Error processing event {global_event_id}: {e}")
+
+
+# ──────────────────────────────────────────────
+# UPLOAD PASS  (uploads ready clips → notifies backend)
+# ──────────────────────────────────────────────
 
 async def upload_event_media_pass():
     """
@@ -390,6 +497,7 @@ async def upload_event_media_pass():
             inner_video  = group["inner_video"]
             front_video  = group["front_video"]
 
+            # Both clips must exist
             if not inner_video or not front_video:
                 logger.info(f"[UPLOAD_PASS] Waiting for both clips: {geid}")
                 continue
@@ -400,6 +508,7 @@ async def upload_event_media_pass():
                 continue
 
             try:
+                # ── Screenshots ──────────────────────────────
                 inner_ss_path = inner_video.replace(".mp4", "_ss.webp")
                 front_ss_path = front_video.replace(".mp4", "_ss.webp")
 
@@ -411,6 +520,7 @@ async def upload_event_media_pass():
                     increment_event_video_retry(geid)
                     continue
 
+                # ── Upload all 4 ─────────────────────────────
                 inside_video_key       = await upload_file(session, token, inner_video,  is_video=True)
                 outside_video_key      = await upload_file(session, token, front_video,  is_video=True)
                 inside_screenshot_key  = await upload_file(session, token, inner_ss_path, is_video=False)
@@ -422,6 +532,7 @@ async def upload_event_media_pass():
                     increment_event_video_retry(geid)
                     continue
 
+                # ── Notify backend ────────────────────────────
                 ok = await notify_backend(
                     session, token, geid,
                     inside_video_key, outside_video_key,
@@ -431,6 +542,7 @@ async def upload_event_media_pass():
                 if ok:
                     mark_event_video_uploaded(geid)
                     logger.info(f"[UPLOAD_PASS] Done: {geid}")
+                    # Optional: delete local clip + screenshot files to save space
                     for p in [inner_video, front_video, inner_ss_path, front_ss_path]:
                         try:
                             os.remove(p)
@@ -450,6 +562,7 @@ async def event_video_uploader_loop():
         try:
             create_clips_for_new_events()
 
+            # Phase 2: upload clips that are ready
             await upload_event_media_pass()
 
         except Exception as e:

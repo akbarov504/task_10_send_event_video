@@ -155,14 +155,14 @@ def _find_segment_file(camera_type: str, dt: datetime) -> str | None:
     Segments are named like: inner_20250507_153000.mp4  (start time)
     We look in LOCAL_PATH for a segment whose [start, start+10) window covers dt.
     """
-    prefix = "inner_" if camera_type == "inner" else "front_"
+    prefix = "IN_" if camera_type == "inner" else "OUT_"
     best = None
     for fname in os.listdir(LOCAL_PATH):
         if not fname.startswith(prefix) or not fname.endswith(".mp4"):
             continue
         try:
-            ts_str = fname[len(prefix):-4]          # "20250507_153000"
-            seg_start = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            ts_str = fname[len(prefix):-4]
+            seg_start = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
             seg_end   = seg_start + timedelta(seconds=10)
             if seg_start <= dt < seg_end:
                 best = os.path.join(LOCAL_PATH, fname)
@@ -194,14 +194,9 @@ def cut_event_clip(
         if not fname.startswith(prefix) or not fname.endswith(".mp4"):
             continue
         try:
-            ts_str    = fname[len(prefix):-4]
-            print("ts_str = " + ts_str)
-            seg_start = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            ts_str = fname[len(prefix):-4]
+            seg_start = datetime.strptime(ts_str, "%Y-%m-%d_%H-%M-%S")
             seg_end   = seg_start + timedelta(seconds=10)
-            print("seg_start = " + seg_start)
-            print("seg_end = " + seg_end)
-            print("clip_start = " + clip_start)
-            print("clip_end = " + clip_end)
             if seg_end > clip_start and seg_start < clip_end:
                 segments.append((seg_start, os.path.join(LOCAL_PATH, fname)))
         except ValueError:

@@ -8,7 +8,7 @@ PARENT_DIR = os.path.dirname(BASE_DIR)
 TASK_7_VERTUAL_PATH = os.path.join(PARENT_DIR, "task_7_vertual")
 LOCAL_PATH = os.path.join(TASK_7_VERTUAL_PATH, 'records/')
 DB_PATH = os.path.join(TASK_7_VERTUAL_PATH, 'adas_dms.db')
-
+print(LOCAL_PATH)
 MODEL_PATH = os.path.join(PARENT_DIR, 'models/')
 SOUND_PATH = os.path.join(BASE_DIR, 'sounds/')
 REF_IMAGES = os.path.join(BASE_DIR, 'ref_images/')
